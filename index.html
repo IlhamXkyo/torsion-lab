@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TORSION LAB | Kinetic Chaos Dynamics & Harmonic Phase Space</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body data-theme="crt">
+  <div id="app-container">
+    <!-- TOP TELEMETRY STATUS BAR -->
+    <header id="top-bar">
+      <div class="brand-section">
+        <div class="brand-logo">
+          <div class="logo-dot"></div>
+          <span>TORSION LAB</span>
+        </div>
+        <span class="tagline">CHAOS DYNAMICS // RK4 SOLVER</span>
+      </div>
+
+      <div class="telemetry-strip">
+        <div class="metric-item">
+          <span class="metric-label">FPS</span>
+          <span class="metric-value" id="telemetry-fps">60 FPS</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">ENERGY</span>
+          <span class="metric-value" id="telemetry-energy">0 J</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">LYAPUNOV</span>
+          <span class="metric-value" id="telemetry-lyapunov">+0.00 λ</span>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="btn-audio" class="btn-icon" title="Toggle Audio Synthesizer (M)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2"/>
+            <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
+        <button id="btn-play-pause" class="btn-icon" title="Play / Pause (Space)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </button>
+        <button id="btn-reset" class="btn-icon" title="Reset State (R)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+        </button>
+        <button id="btn-clear-trail" class="btn-icon" title="Clear Trajectory (T)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </button>
+        <button id="btn-toggle-drawer" class="btn-icon active" title="Toggle Controls Dock">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN VIEWPORT CANVAS -->
+    <main id="viewport-container">
+      <canvas id="simulation-canvas"></canvas>
+
+      <!-- PHASE PORTRAIT TELEMETRY HUD -->
+      <aside class="hud-phase-portrait" id="hud-phase-portrait">
+        <div class="hud-header">
+          <span>Phase Space [θ₂ vs ω₂]</span>
+        </div>
+        <canvas id="phase-canvas"></canvas>
+      </aside>
+
+      <!-- LIVE HAMILTONIAN ENERGY BAR HUD -->
+      <aside class="hud-energy-bar" id="hud-energy-bar">
+        <div class="energy-row">
+          <span class="metric-label">Kinetic [T]</span>
+          <span class="metric-value" id="energy-val-kinetic">0 J</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill-kinetic" id="bar-fill-kinetic"></div>
+        </div>
+        <div class="energy-row" style="margin-top: 4px;">
+          <span class="metric-label">Potential [V]</span>
+          <span class="metric-value" id="energy-val-potential" style="color: var(--accent-secondary)">0 J</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill-potential" id="bar-fill-potential"></div>
+        </div>
+      </aside>
+
+      <!-- FLOATING CONTROL DRAWER -->
+      <section id="control-drawer">
+        <div class="drawer-header">
+          <span class="drawer-title">Physics & Telemetry Controls</span>
+        </div>
+
+        <div class="drawer-scrollable">
+          <!-- PRESETS -->
+          <div class="control-group">
+            <span class="group-title">Dynamic Presets (1-5)</span>
+            <div class="preset-grid">
+              <button class="btn-preset active" data-preset="butterfly">Twin Chaos</button>
+              <button class="btn-preset" data-preset="loop">Flip Loop</button>
+              <button class="btn-preset" data-preset="magnets">Magnetic Trap</button>
+              <button class="btn-preset" data-preset="harmonic">Harmonic Lissajous</button>
+              <button class="btn-preset" data-preset="zerog" style="grid-column: span 2;">Zero-G Slingshot</button>
+            </div>
+          </div>
+
+          <!-- PENDULUM GEOMETRY -->
+          <div class="control-group">
+            <span class="group-title">Rigid Body Geometry</span>
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Rod 1 Length (L₁)</span>
+                <span class="slider-value" id="val-length1">160</span>
+              </div>
+              <input type="range" id="slider-length1" min="60" max="260" value="160" step="5">
+            </div>
+
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Rod 2 Length (L₂)</span>
+                <span class="slider-value" id="val-length2">140</span>
+              </div>
+              <input type="range" id="slider-length2" min="60" max="240" value="140" step="5">
+            </div>
+
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Bob 1 Mass (m₁)</span>
+                <span class="slider-value" id="val-mass1">15</span>
+              </div>
+              <input type="range" id="slider-mass1" min="2" max="40" value="15" step="1">
+            </div>
+
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Bob 2 Mass (m₂)</span>
+                <span class="slider-value" id="val-mass2">12</span>
+              </div>
+              <input type="range" id="slider-mass2" min="2" max="40" value="12" step="1">
+            </div>
+          </div>
+
+          <!-- FIELD FORCES -->
+          <div class="control-group">
+            <span class="group-title">Environmental Forces</span>
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Gravity Constant (g)</span>
+                <span class="slider-value" id="val-gravity">9.81</span>
+              </div>
+              <input type="range" id="slider-gravity" min="0" max="25" value="9.81" step="0.5">
+            </div>
+
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Air Damping (γ)</span>
+                <span class="slider-value" id="val-damping">0.0002</span>
+              </div>
+              <input type="range" id="slider-damping" min="0" max="0.003" value="0.0002" step="0.0001">
+            </div>
+
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Time Dilation</span>
+                <span class="slider-value" id="val-timescale">1.0</span>
+              </div>
+              <input type="range" id="slider-timescale" min="0.1" max="2.5" value="1.0" step="0.1">
+            </div>
+          </div>
+
+          <!-- VECTOR VISUALS & TELEMETRY -->
+          <div class="control-group">
+            <span class="group-title">Trajectory & Telemetry</span>
+            <div class="slider-item">
+              <div class="slider-header">
+                <span class="slider-label">Trail Memory Buffer</span>
+                <span class="slider-value" id="val-trail">1200</span>
+              </div>
+              <input type="range" id="slider-trail" min="200" max="3000" value="1200" step="100">
+            </div>
+
+            <label class="toggle-item">
+              <span class="toggle-label">Shadow Twin Divergence (S)</span>
+              <div class="switch">
+                <input type="checkbox" id="toggle-shadow" checked>
+                <span class="slider-round"></span>
+              </div>
+            </label>
+
+            <label class="toggle-item">
+              <span class="toggle-label">Phase Space Map [θ vs ω]</span>
+              <div class="switch">
+                <input type="checkbox" id="toggle-phase" checked>
+                <span class="slider-round"></span>
+              </div>
+            </label>
+
+            <label class="toggle-item">
+              <span class="toggle-label">Hamiltonian Energy Bar</span>
+              <div class="switch">
+                <input type="checkbox" id="toggle-energy" checked>
+                <span class="slider-round"></span>
+              </div>
+            </label>
+          </div>
+
+          <!-- COLOR THEMES -->
+          <div class="control-group">
+            <span class="group-title">Phosphor CRT Palettes</span>
+            <div class="theme-selector">
+              <div class="theme-chip chip-crt active" data-theme="crt">CRT</div>
+              <div class="theme-chip chip-cyber" data-theme="cyberpunk">CYBER</div>
+              <div class="theme-chip chip-amber" data-theme="amber">AMBER</div>
+              <div class="theme-chip chip-stealth" data-theme="stealth">SLATE</div>
+            </div>
+          </div>
+
+          <!-- EXPORT ENGINE -->
+          <div class="control-group">
+            <span class="group-title">Vector & Snapshot Export</span>
+            <div class="action-buttons">
+              <button class="btn-primary" id="btn-export-png">PNG Snapshot</button>
+              <button class="btn-secondary" id="btn-export-svg">SVG Vector</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SHORTCUTS BADGE -->
+      <aside class="hint-badge">
+        <span><kbd>Space</kbd> Pause</span>
+        <span><kbd>R</kbd> Reset</span>
+        <span><kbd>T</kbd> Clear Trail</span>
+        <span><kbd>M</kbd> Mute</span>
+        <span><kbd>Right-Click</kbd> Place Magnet</span>
+      </aside>
+
+      <!-- FLOATING TOAST NOTIFICATION -->
+      <div id="toast">Notification</div>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
