@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DoublePendulumPhysics, normalizeAngle } from "../physics.js";
+import { DoublePendulumPhysics, normalizeAngle } from "../js/physics.js";
 
 test("normalizeAngle wraps angles correctly into [-pi, pi]", () => {
   assert.equal(normalizeAngle(0), 0);

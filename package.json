@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "description": "Interactive kinetic chaos laboratory, vector phase space telemetry, and procedural acoustic resonance workbench.",
   "type": "module",
-  "main": "app.js",
+  "main": "js/app.js",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "start": "npx serve ."
