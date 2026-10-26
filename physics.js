@@ -3,6 +3,13 @@
  * Integrates equations of motion via 4th-order Runge-Kutta (RK4) with symplectic precision.
  */
 
+export function normalizeAngle(theta) {
+  const twoPi = 2 * Math.PI;
+  let a = (theta + Math.PI) % twoPi;
+  if (a < 0) a += twoPi;
+  return a - Math.PI;
+}
+
 export class DoublePendulumPhysics {
   constructor() {
     // Physical attributes (SI units approximation)
@@ -22,20 +29,21 @@ export class DoublePendulumPhysics {
     this.shadowState = [this.state[0] + this.shadowOffset, this.state[1], 0.0, 0.0];
     this.enableShadow = true;
     this.lyapunovSum = 0;
-    this.lyapunovSteps = 0;
+    this.lyapunovTime = 0;
     this.currentLyapunov = 0;
 
-    // Magnetic attractors array: { x, y, strength, polarity: 1|-1 }
+    // Magnetic attractors array: { x, y, strength, polarity: 1|-1, id }
     this.magnets = [];
 
     // Pivot anchor (center of simulation)
     this.pivot = { x: 0, y: 0 };
 
-    // Interaction drag states
+    // Interaction drag states with velocity smoothing
     this.dragTarget = null; // 'bob1' | 'bob2' | null
     this.dragOffset = { x: 0, y: 0 };
     this.dragVelocity = { x: 0, y: 0 };
     this.lastMouse = { x: 0, y: 0 };
+    this.lastDragTime = performance.now();
 
     // Axis crossing event listeners for audio triggering
     this.onCrossing = null;
@@ -51,7 +59,7 @@ export class DoublePendulumPhysics {
     this.state = [theta1, theta2, 0.0, 0.0];
     this.shadowState = [theta1 + this.shadowOffset, theta2, 0.0, 0.0];
     this.lyapunovSum = 0;
-    this.lyapunovSteps = 0;
+    this.lyapunovTime = 0;
     this.currentLyapunov = 0;
     this.prevTheta2 = theta2;
   }
@@ -84,7 +92,7 @@ export class DoublePendulumPhysics {
                  + w2 * w2 * l2 * m2 * cosDelta);
     let alpha2 = num2 / den2;
 
-    // Damping (viscous friction)
+    // Damping (viscous aerodynamic friction)
     alpha1 -= damping * w1 * Math.abs(w1);
     alpha2 -= damping * w2 * Math.abs(w2);
 
@@ -97,7 +105,7 @@ export class DoublePendulumPhysics {
         const distSq = dx * dx + dy * dy + 400; // Softening parameter to prevent singularity
         const dist = Math.sqrt(distSq);
         const forceMag = (m.strength * m.polarity * 15000) / distSq;
-        
+
         // Project force onto tangential direction of bob 2
         // Bob 2 tangential unit vector is (-cos(t2), -sin(t2)) rotated by pi/2: (-sin(t2), cos(t2))
         const fx = (dx / dist) * forceMag;
@@ -115,7 +123,7 @@ export class DoublePendulumPhysics {
    */
   rk4Step(s, dt, applyMagnets = true) {
     const k1 = this.derivatives(s, applyMagnets);
-    
+
     const s2 = s.map((val, i) => val + 0.5 * dt * k1[i]);
     const k2 = this.derivatives(s2, applyMagnets);
 
@@ -144,30 +152,38 @@ export class DoublePendulumPhysics {
         // Compute phase space separation between master and shadow
         const dTheta1 = this.state[0] - this.shadowState[0];
         const dTheta2 = this.state[1] - this.shadowState[1];
-        const distance = Math.sqrt(dTheta1 * dTheta1 + dTheta2 * dTheta2);
+        const distance = Math.hypot(dTheta1, dTheta2);
 
         if (distance > 0) {
-          const lambda = Math.log(distance / this.shadowOffset);
-          this.lyapunovSum += lambda;
-          this.lyapunovSteps++;
-          if (this.lyapunovSteps % 50 === 0) {
-            this.currentLyapunov = this.lyapunovSum / this.lyapunovSteps;
+          // Accumulate finite-time rate: ln(d / d0)
+          const stepRate = Math.log(distance / this.shadowOffset);
+          this.lyapunovSum += stepRate;
+          this.lyapunovTime += scaledDt;
+
+          if (this.lyapunovTime > 0.05) {
+            this.currentLyapunov = this.lyapunovSum / this.lyapunovTime;
           }
-          // Renormalize shadow state when divergence grows too large
-          if (distance > 0.4) {
+
+          // Renormalize shadow state perturbation vector when divergence grows too large
+          if (distance > 0.3) {
             const factor = this.shadowOffset / distance;
             this.shadowState[0] = this.state[0] + dTheta1 * factor;
             this.shadowState[1] = this.state[1] + dTheta2 * factor;
-            this.shadowState[2] = this.state[2];
-            this.shadowState[3] = this.state[3];
+            this.shadowState[2] = this.state[2] + (this.shadowState[2] - this.state[2]) * factor;
+            this.shadowState[3] = this.state[3] + (this.shadowState[3] - this.state[3]) * factor;
           }
         }
       }
     }
 
-    // Wrap angles to [-pi, pi] for display stability
-    this.state[0] = (this.state[0] + Math.PI) % (2 * Math.PI) - Math.PI;
-    this.state[1] = (this.state[1] + Math.PI) % (2 * Math.PI) - Math.PI;
+    // Wrap angles smoothly to [-pi, pi] using Euclidean modulo
+    this.state[0] = normalizeAngle(this.state[0]);
+    this.state[1] = normalizeAngle(this.state[1]);
+
+    if (this.enableShadow) {
+      this.shadowState[0] = normalizeAngle(this.shadowState[0]);
+      this.shadowState[1] = normalizeAngle(this.shadowState[1]);
+    }
 
     // Equilibrium crossing detection (zero crossing of theta2)
     if (this.onCrossing && Math.sign(this.prevTheta2) !== Math.sign(this.state[1])) {
@@ -192,7 +208,7 @@ export class DoublePendulumPhysics {
   }
 
   /**
-   * Computes Hamiltonian energy metrics (Kinetic T + Potential V)
+   * Computes Hamiltonian energy metrics (Kinetic T + Relative Potential V_rel)
    */
   getEnergy() {
     const [t1, t2, w1, w2] = this.state;
@@ -201,18 +217,20 @@ export class DoublePendulumPhysics {
     // Kinetic Energy
     const T1 = 0.5 * m1 * (l1 * w1) ** 2;
     const T2 = 0.5 * m2 * ((l1 * w1) ** 2 + (l2 * w2) ** 2 + 2 * l1 * l2 * w1 * w2 * Math.cos(t1 - t2));
-    const kinetic = T1 + T2;
+    const kinetic = Math.max(0, T1 + T2);
 
-    // Potential Energy (zero reference at pivot)
+    // Potential Energy (minimum potential at hanging equilibrium t1=0, t2=0)
     const y1 = -l1 * Math.cos(t1);
     const y2 = y1 - l2 * Math.cos(t2);
-    const potential = m1 * g * y1 + m2 * g * y2;
+    const rawPotential = m1 * g * y1 + m2 * g * y2;
+    const minPotential = -(m1 + m2) * g * l1 - m2 * g * l2;
+    const potential = Math.max(0, rawPotential - minPotential);
 
     const total = kinetic + potential;
-    return { kinetic, potential, total };
+    return { kinetic, potential, rawPotential, total };
   }
 
-  // Interactive Drag & Drop
+  // Interactive Drag & Drop with temporal velocity tracking
   startDrag(mouseX, mouseY) {
     const b1 = this.getBob1Position();
     const b2 = this.getBob2Position();
@@ -220,13 +238,18 @@ export class DoublePendulumPhysics {
     const d1 = Math.hypot(mouseX - b1.x, mouseY - b1.y);
     const d2 = Math.hypot(mouseX - b2.x, mouseY - b2.y);
 
-    if (d2 < 24) {
+    const now = performance.now();
+    if (d2 < 28) {
       this.dragTarget = 'bob2';
       this.lastMouse = { x: mouseX, y: mouseY };
+      this.lastDragTime = now;
+      this.dragVelocity = { x: 0, y: 0 };
       return true;
-    } else if (d1 < 24) {
+    } else if (d1 < 28) {
       this.dragTarget = 'bob1';
       this.lastMouse = { x: mouseX, y: mouseY };
+      this.lastDragTime = now;
+      this.dragVelocity = { x: 0, y: 0 };
       return true;
     }
     return false;
@@ -235,9 +258,16 @@ export class DoublePendulumPhysics {
   drag(mouseX, mouseY) {
     if (!this.dragTarget) return;
 
+    const now = performance.now();
+    const dt = Math.max(0.001, (now - this.lastDragTime) / 1000);
+    this.lastDragTime = now;
+
+    // Exponential moving average for flick impulse
+    const vx = (mouseX - this.lastMouse.x) / dt;
+    const vy = (mouseY - this.lastMouse.y) / dt;
     this.dragVelocity = {
-      x: mouseX - this.lastMouse.x,
-      y: mouseY - this.lastMouse.y
+      x: this.dragVelocity.x * 0.4 + vx * 0.6,
+      y: this.dragVelocity.y * 0.4 + vy * 0.6
     };
     this.lastMouse = { x: mouseX, y: mouseY };
 
@@ -264,13 +294,18 @@ export class DoublePendulumPhysics {
 
   endDrag() {
     if (this.dragTarget) {
-      // Transfer flick impulse velocity
+      const now = performance.now();
+      // If user paused mouse before releasing (>80ms), clear flick velocity
+      const timeSinceMove = now - this.lastDragTime;
+      const effectiveVx = timeSinceMove > 80 ? 0 : this.dragVelocity.x;
+
       if (this.dragTarget === 'bob1') {
-        this.state[2] = (this.dragVelocity.x / this.l1) * 2;
+        this.state[2] = Math.max(-25, Math.min(25, (effectiveVx / this.l1) * 0.8));
       } else {
-        this.state[3] = (this.dragVelocity.x / this.l2) * 2;
+        this.state[3] = Math.max(-25, Math.min(25, (effectiveVx / this.l2) * 0.8));
       }
       this.dragTarget = null;
+      this.dragVelocity = { x: 0, y: 0 };
     }
   }
 
@@ -278,7 +313,7 @@ export class DoublePendulumPhysics {
     this.magnets.push({ x, y, polarity, strength, id: Date.now() + Math.random() });
   }
 
-  removeMagnetAt(x, y, radius = 24) {
+  removeMagnetAt(x, y, radius = 28) {
     const initialLen = this.magnets.length;
     this.magnets = this.magnets.filter(m => Math.hypot(m.x - x, m.y - y) > radius);
     return initialLen !== this.magnets.length;

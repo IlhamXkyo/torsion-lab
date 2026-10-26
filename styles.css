@@ -632,6 +632,12 @@ input:checked + .slider-round:before {
 }
 
 @media (max-width: 768px) {
+  .tagline {
+    display: none;
+  }
+  .metric-item:nth-child(3) {
+    display: none;
+  }
   #control-drawer {
     width: calc(100vw - 32px);
   }
@@ -640,5 +646,30 @@ input:checked + .slider-round:before {
   }
   .hint-badge {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  #top-bar {
+    padding: 6px 10px;
+  }
+  .brand-logo span {
+    font-size: 12px;
+  }
+  .telemetry-strip {
+    gap: 8px;
+  }
+  .top-actions {
+    gap: 4px;
+  }
+  .btn-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .hud-energy-bar {
+    left: 10px;
+    bottom: 10px;
+    min-width: 170px;
+    padding: 8px 10px;
   }
 }

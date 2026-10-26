@@ -32,7 +32,7 @@
         </div>
         <div class="metric-item">
           <span class="metric-label">LYAPUNOV</span>
-          <span class="metric-value" id="telemetry-lyapunov">+0.00 λ</span>
+          <span class="metric-value" id="telemetry-lyapunov">+0.00 λ/s</span>
         </div>
       </div>
 
@@ -42,6 +42,13 @@
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
             <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2"/>
             <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
+        <button id="btn-magnet-mode" class="btn-icon" title="Magnet Tool: Click to Place / Remove Coils (C)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4v7a8 8 0 0 0 16 0V4"/>
+            <line x1="4" y1="8" x2="8" y2="8"/>
+            <line x1="16" y1="8" x2="20" y2="8"/>
           </svg>
         </button>
         <button id="btn-play-pause" class="btn-icon" title="Play / Pause (Space)">
@@ -94,7 +101,7 @@
           <div class="bar-fill-kinetic" id="bar-fill-kinetic"></div>
         </div>
         <div class="energy-row" style="margin-top: 4px;">
-          <span class="metric-label">Potential [V]</span>
+          <span class="metric-label">Relative Potential [V]</span>
           <span class="metric-value" id="energy-val-potential" style="color: var(--accent-secondary)">0 J</span>
         </div>
         <div class="bar-track">
@@ -249,7 +256,8 @@
         <span><kbd>R</kbd> Reset</span>
         <span><kbd>T</kbd> Clear Trail</span>
         <span><kbd>M</kbd> Mute</span>
-        <span><kbd>Right-Click</kbd> Place Magnet</span>
+        <span><kbd>C</kbd> Magnet Tool</span>
+        <span><kbd>Right-Click</kbd> Add Magnet</span>
       </aside>
 
       <!-- FLOATING TOAST NOTIFICATION -->

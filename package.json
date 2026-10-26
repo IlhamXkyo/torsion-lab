@@ -1,0 +1,33 @@
+{
+  "name": "torsion-lab",
+  "version": "1.1.0",
+  "description": "Interactive kinetic chaos laboratory, vector phase space telemetry, and procedural acoustic resonance workbench.",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "chaos-theory",
+    "double-pendulum",
+    "runge-kutta-4",
+    "lyapunov-exponent",
+    "phase-space",
+    "web-audio",
+    "canvas-api",
+    "physics-simulation",
+    "hamiltonian-dynamics",
+    "interactive-physics"
+  ],
+  "author": "IlhamXkyo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IlhamXkyo/torsion-lab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/IlhamXkyo/torsion-lab/issues"
+  },
+  "homepage": "https://github.com/IlhamXkyo/torsion-lab#readme"
+}

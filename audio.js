@@ -21,11 +21,13 @@ export class AudioEngine {
     if (this.isInitialized) return;
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
       this.ctx = new AudioContextClass();
 
       // Master output
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.4, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.35, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
 
       // Ambient dynamic drone
@@ -35,7 +37,7 @@ export class AudioEngine {
       this.filter.Q.setValueAtTime(3.0, this.ctx.currentTime);
 
       this.droneGain = this.ctx.createGain();
-      this.droneGain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+      this.droneGain.gain.setValueAtTime(0.04, this.ctx.currentTime);
 
       this.droneOsc = this.ctx.createOscillator();
       this.droneOsc.type = "sawtooth";
@@ -57,7 +59,7 @@ export class AudioEngine {
       this.init();
     }
     if (this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -66,8 +68,9 @@ export class AudioEngine {
     this.isMuted = !this.isMuted;
     if (this.masterGain && this.ctx) {
       const targetGain = this.isMuted ? 0 : 0.35;
-      this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
-      this.masterGain.gain.linearRampToValueAtTime(targetGain, this.ctx.currentTime + 0.05);
+      const now = this.ctx.currentTime;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.linearRampToValueAtTime(targetGain, now + 0.05);
     }
     return !this.isMuted;
   }
@@ -76,12 +79,13 @@ export class AudioEngine {
    * Modulates the continuous drone based on total kinetic energy and velocity
    */
   updateDrone(kineticEnergy, angularVelocity) {
-    if (!this.isInitialized || this.isMuted || !this.ctx) return;
+    if (!this.isInitialized || this.isMuted || !this.ctx || !this.filter || !this.droneOsc) return;
+    if (!Number.isFinite(kineticEnergy) || !Number.isFinite(angularVelocity)) return;
 
     const now = this.ctx.currentTime;
-    const clampedEnergy = Math.min(Math.max(kineticEnergy, 0), 2000);
-    const filterFreq = 120 + Math.sqrt(clampedEnergy) * 35;
-    const oscPitch = 55 + Math.min(Math.abs(angularVelocity) * 4, 80);
+    const clampedEnergy = Math.min(Math.max(kineticEnergy, 0), 5000);
+    const filterFreq = Math.max(50, Math.min(2500, 120 + Math.sqrt(clampedEnergy) * 35));
+    const oscPitch = Math.max(30, Math.min(400, 55 + Math.min(Math.abs(angularVelocity) * 4, 80)));
 
     this.filter.frequency.setTargetAtTime(filterFreq, now, 0.08);
     this.droneOsc.frequency.setTargetAtTime(oscPitch, now, 0.08);
@@ -92,6 +96,7 @@ export class AudioEngine {
    */
   playCrossingChime(velocity, panX = 0) {
     if (!this.isInitialized || this.isMuted || !this.ctx) return;
+    if (!Number.isFinite(velocity)) return;
 
     const speed = Math.abs(velocity);
     if (speed < 0.2) return;
@@ -108,16 +113,20 @@ export class AudioEngine {
     // Stereo Panner
     let panner = null;
     if (this.ctx.createStereoPanner) {
-      panner = this.ctx.createStereoPanner();
-      const clampedPan = Math.max(-0.9, Math.min(0.9, panX));
-      panner.pan.setValueAtTime(clampedPan, now);
+      try {
+        panner = this.ctx.createStereoPanner();
+        const clampedPan = Math.max(-0.9, Math.min(0.9, Number.isFinite(panX) ? panX : 0));
+        panner.pan.setValueAtTime(clampedPan, now);
+      } catch {
+        panner = null;
+      }
     }
 
     osc.type = "sine";
     osc.frequency.setValueAtTime(freq, now);
 
     // Dynamic amplitude decay
-    const amp = Math.min(0.25, 0.05 + speed * 0.03);
+    const amp = Math.min(0.22, 0.04 + speed * 0.025);
     gain.gain.setValueAtTime(amp, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
 
@@ -129,6 +138,15 @@ export class AudioEngine {
       osc.connect(gain);
       gain.connect(this.masterGain);
     }
+
+    // Clean disconnect on completion to prevent Web Audio memory leak
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+        gain.disconnect();
+        if (panner) panner.disconnect();
+      } catch {}
+    };
 
     osc.start(now);
     osc.stop(now + 0.5);
@@ -147,11 +165,18 @@ export class AudioEngine {
     osc.frequency.setValueAtTime(pitch, now);
     osc.frequency.exponentialRampToValueAtTime(200, now + 0.03);
 
-    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.setValueAtTime(0.07, now);
     gain.gain.linearRampToValueAtTime(0.0001, now + 0.03);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
+
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+        gain.disconnect();
+      } catch {}
+    };
 
     osc.start(now);
     osc.stop(now + 0.04);

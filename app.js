@@ -16,7 +16,6 @@ class TorsionApp {
     this.trail = [];
     this.shadowTrail = [];
     this.maxTrailLength = 1200;
-    this.fadeRate = 0.992;
     this.glowIntensity = 15;
 
     // Simulation run state
@@ -34,7 +33,7 @@ class TorsionApp {
     this.theme = "crt";
     this.showPhasePortrait = true;
     this.showEnergyBar = true;
-    this.magnetPlacementMode = null; // 'attract' | 'repel' | null
+    this.isMagnetMode = false; // Magnet placement tool mode
 
     this.init();
   }
@@ -85,7 +84,12 @@ class TorsionApp {
     // Touch support
     this.simCanvas.addEventListener("touchstart", (e) => {
       const t = e.touches[0];
-      this.handlePointerDown({ clientX: t.clientX, clientY: t.clientY, button: 0, preventDefault: () => e.preventDefault() });
+      this.handlePointerDown({
+        clientX: t.clientX,
+        clientY: t.clientY,
+        button: 0,
+        preventDefault: () => e.preventDefault()
+      });
     }, { passive: false });
 
     window.addEventListener("touchmove", (e) => {
@@ -103,14 +107,7 @@ class TorsionApp {
       const rect = this.simCanvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-
-      if (!this.physics.removeMagnetAt(x, y)) {
-        this.physics.addMagnet(x, y, 1, 1.0);
-        this.showToast("Magnetic Coil Placed");
-      } else {
-        this.showToast("Magnetic Coil Removed");
-      }
-      this.audio.playUiClick(1500);
+      this.toggleMagnetAt(x, y);
     });
 
     // Top Bar Buttons
@@ -120,9 +117,14 @@ class TorsionApp {
     document.getElementById("btn-audio").addEventListener("click", () => this.toggleAudio());
     document.getElementById("btn-toggle-drawer").addEventListener("click", () => this.toggleDrawer());
 
+    const btnMagnet = document.getElementById("btn-magnet-mode");
+    if (btnMagnet) {
+      btnMagnet.addEventListener("click", () => this.toggleMagnetMode());
+    }
+
     // Presets
     document.querySelectorAll(".btn-preset").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", () => {
         document.querySelectorAll(".btn-preset").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         this.loadPreset(btn.dataset.preset);
@@ -145,12 +147,12 @@ class TorsionApp {
     this.bindToggle("toggle-phase", (val) => {
       this.showPhasePortrait = val;
       const el = document.getElementById("hud-phase-portrait");
-      el.style.display = val ? "flex" : "none";
+      if (el) el.style.display = val ? "flex" : "none";
     });
     this.bindToggle("toggle-energy", (val) => {
       this.showEnergyBar = val;
       const el = document.getElementById("hud-energy-bar");
-      el.style.display = val ? "flex" : "none";
+      if (el) el.style.display = val ? "flex" : "none";
     });
 
     // Theme selector
@@ -179,11 +181,15 @@ class TorsionApp {
         this.clearTrail();
       } else if (e.key === "m" || e.key === "M") {
         this.toggleAudio();
+      } else if (e.key === "c" || e.key === "C") {
+        this.toggleMagnetMode();
       } else if (e.key === "s" || e.key === "S") {
         const toggle = document.getElementById("toggle-shadow");
-        toggle.checked = !toggle.checked;
-        this.physics.enableShadow = toggle.checked;
-        this.showToast(`Shadow Twin: ${toggle.checked ? "ON" : "OFF"}`);
+        if (toggle) {
+          toggle.checked = !toggle.checked;
+          this.physics.enableShadow = toggle.checked;
+          this.showToast(`Shadow Twin: ${toggle.checked ? "ON" : "OFF"}`);
+        }
       } else if (e.key >= "1" && e.key <= "5") {
         const presets = ["butterfly", "loop", "magnets", "harmonic", "zerog"];
         const chosen = presets[parseInt(e.key, 10) - 1];
@@ -214,11 +220,35 @@ class TorsionApp {
     toggle.addEventListener("change", () => callback(toggle.checked));
   }
 
+  toggleMagnetMode() {
+    this.isMagnetMode = !this.isMagnetMode;
+    const btn = document.getElementById("btn-magnet-mode");
+    if (btn) btn.classList.toggle("active", this.isMagnetMode);
+    this.simCanvas.style.cursor = this.isMagnetMode ? "copy" : "crosshair";
+    this.showToast(this.isMagnetMode ? "Magnet Tool: ON (Click to place/remove)" : "Magnet Tool: OFF");
+    this.audio.playUiClick(this.isMagnetMode ? 1500 : 900);
+  }
+
+  toggleMagnetAt(x, y) {
+    if (!this.physics.removeMagnetAt(x, y)) {
+      this.physics.addMagnet(x, y, 1, 1.0);
+      this.showToast("Magnetic Coil Added (+)");
+    } else {
+      this.showToast("Magnetic Coil Removed");
+    }
+    this.audio.playUiClick(1500);
+  }
+
   handlePointerDown(e) {
     this.audio.resume();
     const rect = this.simCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    if (this.isMagnetMode) {
+      this.toggleMagnetAt(x, y);
+      return;
+    }
 
     if (e.button === 0) {
       const hit = this.physics.startDrag(x, y);
@@ -229,6 +259,7 @@ class TorsionApp {
   }
 
   handlePointerMove(e) {
+    if (this.isMagnetMode) return;
     const rect = this.simCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -293,7 +324,6 @@ class TorsionApp {
 
     switch (name) {
       case "butterfly":
-        // Classic chaos demonstration with shadow twin divergence
         this.physics.l1 = 160;
         this.physics.l2 = 140;
         this.physics.m1 = 15;
@@ -305,7 +335,6 @@ class TorsionApp {
         break;
 
       case "loop":
-        // Inverted high-energy loop flips
         this.physics.l1 = 150;
         this.physics.l2 = 150;
         this.physics.m1 = 20;
@@ -316,7 +345,6 @@ class TorsionApp {
         break;
 
       case "magnets":
-        // Electromagnetic trap with 3 alternating coils
         this.physics.l1 = 150;
         this.physics.l2 = 130;
         this.physics.m1 = 14;
@@ -334,7 +362,6 @@ class TorsionApp {
         break;
 
       case "harmonic":
-        // Small-angle quasi-linear harmonic coupled oscillation
         this.physics.l1 = 170;
         this.physics.l2 = 170;
         this.physics.m1 = 25;
@@ -346,7 +373,6 @@ class TorsionApp {
         break;
 
       case "zerog":
-        // Zero-G pure centrifugal slingshot
         this.physics.l1 = 150;
         this.physics.l2 = 130;
         this.physics.m1 = 15;
@@ -401,7 +427,8 @@ class TorsionApp {
       this.currentFps = Math.round((this.fpsCounter * 1000) / (currentTime - this.fpsTimer));
       this.fpsCounter = 0;
       this.fpsTimer = currentTime;
-      document.getElementById("telemetry-fps").textContent = `${this.currentFps} FPS`;
+      const elFps = document.getElementById("telemetry-fps");
+      if (elFps) elFps.textContent = `${this.currentFps} FPS`;
     }
 
     if (!this.isPaused) {
@@ -451,7 +478,7 @@ class TorsionApp {
     const elLyapunov = document.getElementById("telemetry-lyapunov");
     if (elLyapunov) {
       const val = this.physics.currentLyapunov;
-      elLyapunov.textContent = `${val >= 0 ? "+" : ""}${val.toFixed(2)} λ`;
+      elLyapunov.textContent = `${val >= 0 ? "+" : ""}${val.toFixed(2)} λ/s`;
       elLyapunov.style.color = val > 0.5 ? "var(--accent-warn)" : "var(--accent-primary)";
     }
 
@@ -463,7 +490,7 @@ class TorsionApp {
       const potVal = document.getElementById("energy-val-potential");
 
       const k = Math.max(0, energy.kinetic);
-      const p = Math.abs(energy.potential);
+      const p = Math.max(0, energy.potential);
       const totalVis = Math.max(k + p, 100);
 
       const kPct = Math.min(100, (k / totalVis) * 100);
@@ -472,7 +499,7 @@ class TorsionApp {
       if (kinBar) kinBar.style.width = `${kPct}%`;
       if (potBar) potBar.style.width = `${pPct}%`;
       if (kinVal) kinVal.textContent = `${Math.round(k)} J`;
-      if (potVal) potVal.textContent = `${Math.round(energy.potential)} J`;
+      if (potVal) potVal.textContent = `${Math.round(p)} J`;
     }
   }
 
@@ -672,6 +699,10 @@ class TorsionApp {
     }
   }
 
+  /**
+   * Discontinuity-free Phase Portrait Renderer.
+   * Breaks line strokes when angle passes the +/- pi boundary to prevent artificial cross-screen slashing.
+   */
   renderPhasePortrait() {
     const ctx = this.phaseCtx;
     const rect = this.phaseCanvas.getBoundingClientRect();
@@ -701,18 +732,34 @@ class TorsionApp {
       ctx.save();
       ctx.strokeStyle = accent;
       ctx.lineWidth = 1.2;
-      ctx.beginPath();
 
-      const scaleX = (w * 0.4) / Math.PI;
-      const scaleY = (h * 0.4) / 12;
+      const scaleX = (w * 0.42) / Math.PI;
+      const scaleY = (h * 0.42) / 12;
+
+      let isNewSegment = true;
+      ctx.beginPath();
 
       for (let i = 0; i < this.phaseHistory.length; i++) {
         const pt = this.phaseHistory[i];
         const px = cx + pt.x * scaleX;
         const py = cy - pt.y * scaleY;
 
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
+        if (i > 0) {
+          const prev = this.phaseHistory[i - 1];
+          // Detect phase angle boundary wrap
+          if (Math.abs(pt.x - prev.x) > Math.PI) {
+            ctx.stroke();
+            ctx.beginPath();
+            isNewSegment = true;
+          }
+        }
+
+        if (isNewSegment) {
+          ctx.moveTo(px, py);
+          isNewSegment = false;
+        } else {
+          ctx.lineTo(px, py);
+        }
       }
       ctx.stroke();
 
@@ -751,14 +798,45 @@ class TorsionApp {
     }
 
     const rect = this.simCanvas.getBoundingClientRect();
+    const style = getComputedStyle(document.body);
+    const accentPrimary = style.getPropertyValue("--accent-primary").trim() || "#00ff88";
+    const accentSecondary = style.getPropertyValue("--accent-secondary").trim() || "#00e1ff";
+    const bgPrimary = style.getPropertyValue("--bg-primary").trim() || "#0a0b0e";
+
     let pathData = `M ${this.trail[0].x.toFixed(1)} ${this.trail[0].y.toFixed(1)}`;
     for (let i = 1; i < this.trail.length; i++) {
       pathData += ` L ${this.trail[i].x.toFixed(1)} ${this.trail[i].y.toFixed(1)}`;
     }
 
-    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${rect.width} ${rect.height}" width="${rect.width}" height="${rect.height}">
-  <rect width="100%" height="100%" fill="#0a0b0e"/>
-  <path d="${pathData}" fill="none" stroke="#00ff88" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    let shadowPathData = "";
+    if (this.physics.enableShadow && this.shadowTrail.length > 1) {
+      shadowPathData = `M ${this.shadowTrail[0].x.toFixed(1)} ${this.shadowTrail[0].y.toFixed(1)}`;
+      for (let i = 1; i < this.shadowTrail.length; i++) {
+        shadowPathData += ` L ${this.shadowTrail[i].x.toFixed(1)} ${this.shadowTrail[i].y.toFixed(1)}`;
+      }
+    }
+
+    const px = this.physics.pivot.x.toFixed(1);
+    const py = this.physics.pivot.y.toFixed(1);
+
+    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${rect.width} ${rect.height}" width="${rect.width}" height="${rect.height}">
+  <defs>
+    <radialGradient id="pivotGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${accentPrimary}" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="${accentPrimary}" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="${bgPrimary}"/>
+  <!-- Pivot Crosshair -->
+  <line x1="${px - 20}" y1="${py}" x2="${px + 20}" y2="${py}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="${px}" y1="${py - 20}" x2="${px}" y2="${py + 20}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
+  <circle cx="${px}" cy="${py}" r="5" fill="#ffffff"/>
+  <!-- Shadow Trail -->
+  ${shadowPathData ? `<path d="${shadowPathData}" fill="none" stroke="rgba(255, 68, 102, 0.4)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
+  <!-- Primary Chaotic Trajectory -->
+  <path d="${pathData}" fill="none" stroke="${accentPrimary}" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
 
     const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
@@ -768,7 +846,7 @@ class TorsionApp {
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
-    this.showToast("Vector Exported (SVG)");
+    this.showToast("Theme-Aware Vector Exported (SVG)");
   }
 }
 
